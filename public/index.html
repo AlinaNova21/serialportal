@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="node_modules/xterm/lib/xterm.js"></script>
+    <script src="node_modules/xterm-addon-attach/lib/xterm-addon-attach.js"></script>
+    <script src="node_modules/vue/dist/vue.min.js"></script>
+    <script src="node_modules/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1 class="title">Serial Portal</h1>
+      <div class="button-group">
+        <button class="device-button" v-for="dev in devices" @click="selected = dev" :value="dev" v-text="dev" :class="{ 'device-button--active': dev === selected }"></button>
+      </div>
+      <terminal v-if="selected" :device="selected"></terminal>
+    </div>
+    <script>
+      const TERM = Symbol.for("Terminal")
+      Vue.component('terminal', {
+        name: 'terminal',
+        props: ['device'],
+        template: '<div ref="terminal" class="terminal-container"></div>',
+        data: () => ({
+          socket: null,
+          [TERM]: null
+        }),
+        mounted() {
+          this.connect(this.device)
+        },
+        beforeDestroy() {
+          this.socket.close()
+          this[TERM].dispose()
+        },
+        watch: {
+          device(val) {
+            this.connect(this.device)
+          }
+        },
+        methods: {
+          disconnect () {
+            console.log('Disconnect')
+            this.socket.close()
+            this[TERM].dispose()
+          },
+          connect (dev) {
+            if (this.socket) this.disconnect()
+            console.log(`Connect ${dev}`)
+            this.socket = new WebSocket(`${location.origin.replace('http', 'ws')}/serial/${dev}`)
+            const term = this[TERM] = new Terminal({
+              cols: 80,
+              rows: 24
+            })
+            term.open(this.$refs.terminal)
+            term.write(`Connected to ${dev}\r\n`)
+            const attachAddon = new AttachAddon.AttachAddon(this.socket)
+            term.loadAddon(attachAddon)
+          }
+        }
+      })
+      const app = new Vue({
+        el: '#app',
+        data: () => ({
+          selected: '',
+          devices: []
+        }),
+        async created() {
+          const { data: { deviceNames } } = await axios.get('/serial')
+          this.devices = deviceNames
+        }
+      })
+    </script>
+    <style>
+      body {
+        margin: 0;
+        background-color: #888888;
+        display: flex;
+        /* flex-direction: column; */
+        justify-content: space-around;
+      }
+      #app {
+        border: 1px solid gray;
+        padding: 20px;
+        flex: 0 0;
+      }
+      .title {
+        text-align: center;
+      }
+      .terminal-container {
+        display: inline-block;
+      }
+      .button-group {
+        display: flex;
+        width: 720px;
+      }
+      .device-button {
+        flex: 1;
+        width: 100px;
+        height: 32px;
+        border: none;
+        background-color: #aaaaaa;
+      }
+      .device-button:focus {
+          outline:  none;
+      }
+      .device-button--active {
+        background-color: #cccccc;
+      }
+    </style>
+  </body>
+</html>
