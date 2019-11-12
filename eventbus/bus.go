@@ -10,6 +10,18 @@ type DataEvent struct {
 }
 
 type DataChannel chan DataEvent
+
+type Subscription struct {
+	Topic  string
+	Events DataChannel
+	eb     *EventBus
+}
+
+func (s *Subscription) Close() {
+	s.eb.UnSubscribe(s.Topic, s.Events)
+	close(s.Events)
+}
+
 type DataChannelSlice []DataChannel
 
 type EventBus struct {
@@ -23,14 +35,20 @@ func New() *EventBus {
 	}
 }
 
-func (eb *EventBus) Subscribe(topic string, ch DataChannel) {
+func (eb *EventBus) Subscribe(topic string) *Subscription {
 	eb.rm.Lock()
+	ch := make(DataChannel)
 	if prev, found := eb.subscribers[topic]; found {
 		eb.subscribers[topic] = append(prev, ch)
 	} else {
 		eb.subscribers[topic] = append([]DataChannel{}, ch)
 	}
 	eb.rm.Unlock()
+	return &Subscription{
+		Topic:  topic,
+		Events: ch,
+		eb:     eb,
+	}
 }
 
 func (eb *EventBus) UnSubscribe(topic string, ch DataChannel) {

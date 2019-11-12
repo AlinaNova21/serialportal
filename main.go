@@ -45,7 +45,7 @@ func main() {
 				dev := path.Base(event.Name)
 				if strings.HasPrefix(dev, "ttyUSB") {
 					log.Printf("%s: %s", event.Name, event.Op.String())
-					if event.Op&fsnotify.Chmod == fsnotify.Chmod {
+					if event.Op&fsnotify.Chmod == fsnotify.Chmod && pm.Port(dev) == nil {
 						connect(dev)
 						log.Printf("Added dev %s", dev)
 					}
@@ -118,19 +118,17 @@ func handleSerialWS(w http.ResponseWriter, r *http.Request, port *portmanager.Po
 	go func() {
 		done1 := ctx.Done()
 		done2 := port.Context().Done()
-		ch := make(eventbus.DataChannel, 0)
-		eb.Subscribe(port.Device, ch)
+		sub := eb.Subscribe(port.Device)
 		defer func() {
-			eb.UnSubscribe(port.Device, ch)
+			sub.Close()
 			log.Print("end")
 			msg := "\u001b[41;38;1m\u001b[;H\u001b[J\u001b[12;37HDEVICE\u001b[13;34HDISCONNECTED"
 			c.WriteMessage(websocket.BinaryMessage, []byte(msg))
 			c.Close()
-			close(ch)
 		}()
 		for {
 			select {
-			case ev := <-ch:
+			case ev := <-sub.Events:
 				c.WriteMessage(websocket.BinaryMessage, ev.Data.([]byte))
 			case <-done1:
 				return
